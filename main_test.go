@@ -179,9 +179,9 @@ func TestBadAlgorithms(t *testing.T) {
 	if err == nil {
 		t.Errorf("Erroneous algorithm didn't elicit an error")
 	}
-	expectedErrorPrefix := "Invalid algorithm (must be either \"fifo\" or \"hifo\")"
-	if !strings.HasPrefix(err.Error(), expectedErrorPrefix) {
-		t.Errorf("Unexpected error resulted from excessive sales. Expected: \"%s\" ... got \"%s\" instead", expectedErrorPrefix, err.Error())
+	expectedErrorSnippet := "Invalid algorithm (must be either \"fifo\" or \"hifo\")"
+	if !strings.Contains(err.Error(), expectedErrorSnippet) {
+		t.Errorf("Unexpected error resulted from excessive sales. Expected: \"%s\" ... got \"%s\" instead", expectedErrorSnippet, err.Error())
 	}
 	if len(firstLots) > 0 {
 		t.Errorf("Non-empty lot slice was returned despite erroneous algorithm")
@@ -191,36 +191,88 @@ func TestBadAlgorithms(t *testing.T) {
 	if err == nil {
 		t.Errorf("Erroneous algorithm didn't elicit an error (second attempt, multi-word)")
 	}
-	if !strings.HasPrefix(err.Error(), expectedErrorPrefix) {
-		t.Errorf("Unexpected error resulted from excessive sales. Expected: \"%s\" ... got \"%s\" instead", expectedErrorPrefix, err.Error())
+	if !strings.Contains(err.Error(), expectedErrorSnippet) {
+		t.Errorf("Unexpected error resulted from excessive sales. Expected: \"%s\" ... got \"%s\" instead", expectedErrorSnippet, err.Error())
 	}
 	if len(secondLots) > 0 {
 		t.Errorf("Non-empty lot slice was returned despite erroneous algorithm")
 	}
 }
 
+func TestBadInputs(t *testing.T) {
+	extraFieldResult, err := processTransactions([]string{"2021-01-01,extraneousField,buy,10000.00,1.00000000", "2021-01-02,buy,20000.00,1.00000000", "2021-02-01,bad,20000.00,1.50000000"}, "fifo")
+	if err == nil {
+		t.Errorf("Extra nonsensical field didn't elicit an error")
+	}
+	expectedErrorSnippet := "Invalid tx format; incorrect argument count (should be 4, got 5)"
+	if !strings.Contains(err.Error(), expectedErrorSnippet) {
+		t.Errorf("Unexpected error resulted from bad txType. Expected: \"%s\" ... got \"%s\" instead", expectedErrorSnippet, err.Error())
+	}
+	if len(extraFieldResult) > 0 {
+		t.Errorf("Non-empty lot slice was returned despite presence of extra field")
+	}
+
+	badTxTypeResult, err := processTransactions([]string{"2021-01-01,buy,10000.00,1.00000000", "2021-01-02,buy,20000.00,1.00000000", "2021-02-01,bad,20000.00,1.50000000"}, "fifo")
+	if err == nil {
+		t.Errorf("Erroneous txType didn't elicit an error")
+	}
+	expectedErrorSnippet = "Invalid order type (must be either \"buy\" or \"sell\")"
+	if !strings.Contains(err.Error(), expectedErrorSnippet) {
+		t.Errorf("Unexpected error resulted from bad txType. Expected: \"%s\" ... got \"%s\" instead", expectedErrorSnippet, err.Error())
+	}
+	if len(badTxTypeResult) > 0 {
+		t.Errorf("Non-empty lot slice was returned despite erroneous txType")
+	}
+
+	badPriceResult, err := processTransactions([]string{"2021-01-01,buy,10000.00,1.00000000", "2021-01-02,buy,200f00.00,1.00000000", "2021-02-01,sell,20000.00,1.50000000"}, "fifo")
+	if err == nil {
+		t.Errorf("Erroneous price value didn't elicit an error")
+	}
+	expectedErrorSnippet = "Invalid (non-float) price"
+	if !strings.Contains(err.Error(), expectedErrorSnippet) {
+		t.Errorf("Unexpected error resulted from bad txType. Expected: \"%s\" ... got \"%s\" instead", expectedErrorSnippet, err.Error())
+	}
+	if len(badPriceResult) > 0 {
+		t.Errorf("Non-empty lot slice was returned despite erroneous price value")
+	}
+
+	badQuantityResult, err := processTransactions([]string{"2021-01-01,buy,10000.00,1.00000000", "2021-01-02,buy,20000.00,1.0000xyz0", "2021-02-01,sell,20000.00,1.50000000"}, "fifo")
+	if err == nil {
+		t.Errorf("Erroneous quantity value didn't elicit an error")
+	}
+	expectedErrorSnippet = "Invalid (non-float) quantity"
+	if !strings.Contains(err.Error(), expectedErrorSnippet) {
+		t.Errorf("Unexpected error resulted from bad txType. Expected: \"%s\" ... got \"%s\" instead", expectedErrorSnippet, err.Error())
+	}
+	if len(badQuantityResult) > 0 {
+		t.Errorf("Non-empty lot slice was returned despite erroneous quantity value")
+	}
+}
 func TestEndToEnd(t *testing.T) {
 	testInputs := []string{
-		"2021-01-01,buy,10000.00,1.00000000\n2021-02-01,sell,20000.00,0.50000000", "2021-01-01,buy,10000.00,1.00000000\n2021-01-02,buy,20000.00,1.00000000\n2021-02-01,sell,20000.00,1.50000000",
+		"2021-01-01,buy,10000.00,1.00000000\n2021-02-01,sell,20000.00,0.50000000",
+		"2021-01-01,buy,10000.00,1.00000000\n2021-01-02,buy,20000.00,1.00000000\n2021-02-01,sell,20000.00,1.50000000",
 		"2021-01-01,buy,10000.00,1.00000000\n2021-01-02,buy,20000.00,1.00000000\n2021-02-01,sell,20000.00,1.50000000",
 		"2021-01-01,buy,10000.00,1.00000000\n2021-01-01,buy,15000.00,1.00000000\n2021-02-01,sell,20000.00,1.50000000",
+		"2021-01-01,buy,10000.00,1.00000000\n2021-01-02,buy,20000.00,1.00000000\n2021-02-01,sell,20000.00,1.00000000",
 		"2021-01-01,buy,10000.00,1.00000000\n2021-01-01,buy,15000.00,1.00000000\n2021-02-01,sell,20000.00,1.50000000\n2021-02-01,buy,21000.00,1.25000000",
 		"2022-03-16,buy,55432.00,0.50000000\n2022-04-22,buy,58432.60,0.02000000\n2022-09-15,buy,82000.13,0.04000000\n2022-09-15,buy,83000.13,0.04000000\n2022-09-15,sell,91255.10,0.04200000",
 		"2022-03-16,buy,55432.00,0.50000000\n2022-04-22,buy,58432.60,0.02000000\n2022-09-15,buy,82000.13,0.04000000\n2022-09-15,buy,83000.13,0.04000000\n2022-09-15,sell,91255.10,0.04200000",
 		"2022-03-16,buy,55432.00,0.50000000\n2022-04-22,buy,58432.60,0.02000000\n2022-09-15,buy,82000.13,0.04000000\n2022-09-15,buy,83000.13,0.04000000\n2022-09-15,sell,91255.10,0.04200000\n2023-01-18,sell,89255.11,0.54000000",
 		"2025-01-01,buy,1025000.00,0.01000000\n2025-01-02,buy,1025000.00,0.02000000\n2025-08-05,sell,2200000.00,0.00250000",
 	}
-	testAlgorithms := []string{"fifo", "fifo", "hifo", "hifo", "hifo", "fifo", "hifo", "hifo", "fifo"}
+	testAlgorithms := []string{"fifo", "fifo", "hifo", "hifo", "hifo", "hifo", "fifo", "hifo", "hifo", "fifo"}
 	expectedResults := [][]string{
-		[]string{"1,2021-01-01,10000.00,0.50000000"},
-		[]string{"2,2021-01-02,20000.00,0.50000000"},
-		[]string{"1,2021-01-01,10000.00,0.50000000"},
-		[]string{"1,2021-01-01,12500.00,0.50000000"},
-		[]string{"1,2021-01-01,12500.00,0.50000000", "2,2021-02-01,21000.00,1.25000000"},
-		[]string{"1,2022-03-16,55432.00,0.45800000", "2,2022-04-22,58432.60,0.02000000", "3,2022-09-15,82500.13,0.08000000"},
-		[]string{"1,2022-03-16,55432.00,0.50000000", "2,2022-04-22,58432.60,0.02000000", "3,2022-09-15,82500.13,0.03800000"},
-		[]string{"1,2022-03-16,55432.00,0.01800000"},
-		[]string{"1,2025-01-01,1025000.00,0.00750000", "2,2025-01-02,1025000.00,0.02000000"},
+		{"1,2021-01-01,10000.00,0.50000000"},
+		{"2,2021-01-02,20000.00,0.50000000"},
+		{"1,2021-01-01,10000.00,0.50000000"},
+		{"1,2021-01-01,12500.00,0.50000000"},
+		{"1,2021-01-01,10000.00,1.00000000"},
+		{"1,2021-01-01,12500.00,0.50000000", "2,2021-02-01,21000.00,1.25000000"},
+		{"1,2022-03-16,55432.00,0.45800000", "2,2022-04-22,58432.60,0.02000000", "3,2022-09-15,82500.13,0.08000000"},
+		{"1,2022-03-16,55432.00,0.50000000", "2,2022-04-22,58432.60,0.02000000", "3,2022-09-15,82500.13,0.03800000"},
+		{"1,2022-03-16,55432.00,0.01800000"},
+		{"1,2025-01-01,1025000.00,0.00750000", "2,2025-01-02,1025000.00,0.02000000"},
 	}
 
 	for idx, testInput := range testInputs {
